@@ -39,7 +39,7 @@ def is_number(s):
 # Will format the date to a particular format
 def format_date(date_string):
     fmts = ('%b %d, %Y', '%b %d, %Y', '%B %d, %Y', '%B %d %Y', '%m/%d/%Y', '%m/%d/%y', '%b %d,%Y'
-            , '%Y/%m/%d', '%Y-%m-%d', '%d-%b-%Y', '%Y%m%d', '%H:%M:%S', '%H.%M.%S')
+            , '%Y/%m/%d', '%Y-%m-%d', '%d-%b-%Y', '%Y%m%d', '%H:%M:%S', '%H.%M.%S', '%Y-%b-%d %H:%M:%S')
 
     lst = ["20", "19"]
 

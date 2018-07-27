@@ -96,12 +96,15 @@ def format_rows(row):
 def load_file(path, delimiter, header, skip_header):
     logger.info("Loading file :" + path)
     if len(header) > 0:
-        df = pd.read_csv(path, delimiter=delimiter, names=header, engine='python')
+        df = pd.read_csv(path, delimiter=delimiter, names=header, engine='python', dtype=str)
     else:
-        df = pd.read_csv(path, delimiter=delimiter, engine='python')
+        df = pd.read_csv(path, delimiter=delimiter, engine='python', dtype=str)
 
     if edmp_skip_header > 0:
         df = df[int(skip_header):]
+
+    df.columns = map(str.lower, df.columns)
+
     logger.info("Sample DF record :\n" + str(df.iloc[0]) + "\n")
     return df
 
@@ -165,15 +168,15 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
     report = ""
     summery = "<H2>Summary</H2>"
 
-    pk_key = pk_key_str.split(",")
+    pk_key = pk_key_str.lower().split(",")
     src_header = ""
     hdmp_header = ""
 
     if len(src_header_str) > 0:
-        src_header = src_header_str.split(",")
+        src_header = src_header_str.lower().split(",")
 
     if len(hdmp_header_str) > 0:
-        hdmp_header = hdmp_header_str.split(",")
+        hdmp_header = hdmp_header_str.lower().split(",")
 
     df_edmp_raw = load_file(edmp_path, edmp_delimiter, hdmp_header, edmp_skip_header)
 
@@ -184,6 +187,14 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
 
     summery += "<p>" + "total number of rows in the SRC file : %s" % len(df_src_raw.index.values) + "</p>"
     summery += "<p>" + "total number of rows in the EDMP file : %s" % len(df_edmp_raw.index.values) + "</p>"
+
+    key = "--" + "~".join(pk_key) + "--"
+
+    df_src_raw[key] = df_src_raw.apply(lambda row: create_composite_key(row, pk_key), axis=1)
+    logger.info("creating the PK for SRC:\n" + str(df_src_raw.iloc[0]) + "\n")
+
+    df_edmp_raw[key] = df_edmp_raw.apply(lambda row: create_composite_key(row, pk_key), axis=1)
+    logger.info("creating the PK for EDM:\n" + str(df_edmp_raw.iloc[0]) + "\n")
 
     srctotrows = len(df_src_raw.index.values)
     edmtotrows = len(df_edmp_raw.index.values)
@@ -225,14 +236,6 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
     df_src.rename(columns=src_header, inplace=True)
 
     logger.info("SRC DF with foramted cell : \n" + str(df_src.iloc[0]) + "\n")
-
-    key = "--" + "~".join(pk_key) + "--"
-
-    df_src[key] = df_src.apply(lambda row: create_composite_key(row, pk_key), axis=1)
-    logger.info("creating the PK for SRC:\n" + str(df_src.iloc[0]) + "\n")
-
-    df_edmp[key] = df_edmp.apply(lambda row: create_composite_key(row, pk_key), axis=1)
-    logger.info("creating the PK for EDM:\n" + str(df_edmp.iloc[0]) + "\n")
 
     # making the PK as the index for both the tables
     df_src.set_index(key, inplace=True)
@@ -363,8 +366,8 @@ if __name__ == "__main__":
 
         try:
             srctotrows, edmtotrows, srcDup, edmDup, srcMissing, edmMissing, mismatch = \
-                process(tablename, pk, SRC_Cols, EDMP_cols, edmp_file_name, src_file_name,
-                        src_delimiter, src_skip_header, edmp_delimiter, edmp_skip_header)
+                process(tablename, pk, SRC_Cols, EDMP_cols, edmp_file_name,
+                        src_file_name, src_delimiter, src_skip_header, edmp_delimiter, edmp_skip_header)
 
             status = "Success"
         except Exception as e:

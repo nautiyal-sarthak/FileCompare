@@ -104,7 +104,7 @@ def load_file(path, delimiter, header, skip_header):
     if edmp_skip_header > 0:
         df = df[int(skip_header):]
 
-    df.columns = map(str.lower, df.columns)
+    #df.columns = map(str.lower, df.columns)
     return df
 
 
@@ -148,7 +148,7 @@ def create_report(html):
 # Method to create the logs
 def logger(filename, onConsole, msg):
     f = open("log/" + filename + ".log", "a+")
-    f.write(msg)
+    f.write(msg + "\n")
 
     if(onConsole):
         print(msg)
@@ -176,34 +176,29 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
         report = ""
         summery = "<H2>Summary</H2>"
 
-        pk_key = pk_key_str.lower().split(",")
+        pk_key = [x.strip() for x in pk_key_str.lower().split(',')]
+
+        key = "--" + "~".join(pk_key) + "--"
+
         src_header = ""
         hdmp_header = ""
 
         if len(src_header_str) > 0:
-            src_header = src_header_str.lower().split(",")
+            src_header = [x.strip() for x in src_header_str.lower().split(',')]
 
         if len(hdmp_header_str) > 0:
-            hdmp_header = hdmp_header_str.lower().split(",")
+            hdmp_header = [x.strip() for x in hdmp_header_str.lower().split(',')]
 
         df_edmp_raw = load_file(edmp_path, edmp_delimiter, hdmp_header, edmp_skip_header)
-        df_src_raw = load_file(src_path, src_delimiter, src_header, src_skip_header)
-
+        logger(tblname, True, tblname + " : total number of rows in the EDMP file : %s" % len(df_edmp_raw.index.values))
         logger(tblname, False, "\nSample EDMP record :\n" + str(df_edmp_raw.iloc[0]) + "\n")
+
+        df_src_raw = load_file(src_path, src_delimiter, src_header, src_skip_header)
+        logger(tblname, True, tblname + " : total number of rows in the SRC file : %s" % len(df_src_raw.index.values))
         logger(tblname, False, "\nSample SRC record :\n" + str(df_src_raw.iloc[0]) + "\n")
 
         summery += "<p>" + "total number of rows in the SRC file : %s" % len(df_src_raw.index.values) + "</p>"
         summery += "<p>" + "total number of rows in the EDMP file : %s" % len(df_edmp_raw.index.values) + "</p>"
-
-        key = "--" + "~".join(pk_key) + "--"
-
-        logger(tblname, False, "Primary key" + key)
-
-        df_src_raw[key] = df_src_raw.apply(lambda row: create_composite_key(row, pk_key), axis=1)
-        logger(tblname, False, "\ncreating the PK for SRC:\n" + str(df_src_raw.iloc[0]) + "\n")
-
-        df_edmp_raw[key] = df_edmp_raw.apply(lambda row: create_composite_key(row, pk_key), axis=1)
-        logger(tblname, False, "\ncreating the PK for EDM:\n" + str(df_edmp_raw.iloc[0]) + "\n")
 
         srctotrows = len(df_src_raw.index.values)
         edmtotrows = len(df_edmp_raw.index.values)
@@ -211,6 +206,8 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
         # checking if all the cols are matching
         edmp_cols = set(df_edmp_raw.columns)
         src_cols = set(df_src_raw.columns)
+
+        logger(tblname, True, tblname + " : Checking the cols match ")
 
         matchingCol = list(edmp_cols.intersection(src_cols))
         edmpXCols = [item for item in list(edmp_cols) if item not in matchingCol]
@@ -234,10 +231,12 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
         logger(tblname, False, "EDM DF with only matching cols :\n" + str(df_edmp_raw.iloc[0]) + "\n")
 
         # formatting all the cell
+        logger(tblname, True, tblname + " : Data Formating Started ")
         edmp_header = pd.Series(df_edmp_raw.columns)
         df_edmp = df_edmp_raw.apply(lambda row: format_rows(row), axis=1)
         df_edmp.rename(columns=edmp_header, inplace=True)
 
+        logger(tblname, True, tblname + " :EDMP Data Formating completed ")
         logger(tblname, False, "EDM DF with foramted cell : \n" + str(df_edmp.iloc[0]) + "\n")
 
         src_header = pd.Series(df_src_raw.columns)
@@ -245,12 +244,23 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
         df_src.rename(columns=src_header, inplace=True)
 
         logger(tblname, False, "SRC DF with foramted cell : \n" + str(df_src.iloc[0]) + "\n")
+        logger(tblname, True, tblname + " :SRC Data Formating completed ")
 
         # making the PK as the index for both the tables
+        logger(tblname, False, "Primary key" + key)
+
+        df_src[key] = df_src.apply(lambda row: create_composite_key(row, pk_key), axis=1)
+        logger(tblname, False, "\ncreating the PK for SRC:\n" + str(df_src.iloc[0]) + "\n")
+
+        df_edmp[key] = df_edmp.apply(lambda row: create_composite_key(row, pk_key), axis=1)
+        logger(tblname, False, "\ncreating the PK for EDM:\n" + str(df_edmp.iloc[0]) + "\n")
+
         df_src.set_index(key, inplace=True)
         df_edmp.set_index(key, inplace=True)
         df_src.sort_index(inplace=True)
         df_edmp.sort_index(inplace=True)
+
+        logger(tblname, True, tblname + " : PK has been made as index ")
 
         # checking and removing the duplicate rows
         src_duplicate = df_src[df_src.index.duplicated(keep=False)]
@@ -271,6 +281,8 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
             summery += "<p>" + "Duplicates found in the EDMP file: %s" % (len(EDMP_duplicate.index.values) / 2) + "</p>"
             edmDup = len(EDMP_duplicate.index.values) / 2
 
+        logger(tblname, True, tblname + " : Duplicate rows removed")
+
         df_src = df_src.drop_duplicates(pk_key)
         df_edmp = df_edmp.drop_duplicates(pk_key)
 
@@ -281,18 +293,18 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
         srcMissing = 0
         edmMissing = 0
         if len(SRCmissing.index.values) == 0:
-            logger(tblname, False, "SRC file has all the PK in EDMP file")
+            logger(tblname, True, tblname +  " : SRC file has all the PK in EDMP file")
         else:
-            logger(tblname, False, "SRC file has some records that do not have matching PK in EDMP, please check output ")
+            logger(tblname, True, tblname + " : SRC file has some records that do not have matching PK in EDMP, please check output ")
             report += "<H2>SRC file has some records that do not have matching PK in EDMP</H2>" \
                       + SRCmissing.to_html()
             summery += "<p>" + "Extra SRC records: %s " % len(SRCmissing.index.values) + " </p> "
             srcMissing = len(SRCmissing.index.values)
 
         if len(EDMPmissing.index.values) == 0:
-            logger(tblname, False, "EDMP file has all the PK in SRC file")
+            logger(tblname, True, tblname + " : EDMP file has all the PK in SRC file")
         else:
-            logger(tblname, False, "EDMP file has some records that do not have matching PK in SRC, please check output ")
+            logger(tblname, True, tblname + ": EDMP file has some records that do not have matching PK in SRC, please check output ")
             report += "<H2>EDMP file has some records that do not have matching PK in SRC</H2>" \
                       + EDMPmissing.to_html()
             summery += "<p>" + "Extra EDMP records: %s " % len(EDMPmissing.index.values) + " </p> "
@@ -302,11 +314,12 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
         df_src = df_src[df_src.index.isin(df_edmp.index)]
         df_edmp = df_edmp[df_edmp.index.isin(df_src.index)]
 
-        logger(tblname, False, "the number of records being matched : (SRC:%s, EDMP: %s)" %
+        logger(tblname, True, tblname + " : the number of records being matched : (SRC:%s, EDMP: %s)" %
                (str(len(df_src.index.values)),str(len(df_edmp.index.values))))
 
         mismatch = 0
         if len(df_edmp.index.values) != 0:
+            logger(tblname, True, tblname + " : Starting the comparison")
             # comparing all the cols and finding out the differences
             ne = (df_edmp != df_src).any(1)
             df_all = pd.concat([df_src[ne], df_edmp[ne]], axis='columns', keys=['SRC', 'EDMP'])
@@ -331,8 +344,10 @@ def process(tblname, pk_key_str, src_header_str, hdmp_header_str, edmp_path, src
         file.write(summery)
         file.write(report)
         file.close()
+        logger(tblname, True, "process completed for " + tblname)
         status = "Success"
     except Exception as e:
+        logger(tblname, False, str(e))
         status = "Fail"
 
     return tblname, srctotrows, edmtotrows, srcDup, edmDup, srcMissing, edmMissing, mismatch, status
